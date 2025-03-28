@@ -1,0 +1,50 @@
+# Configure Cloud Scheduler to trigger the scheduler service
+
+scheduler:
+  - name: subscription-runner-daily
+    description: "Process all active subscriptions (daily at midnight)"
+    schedule: "0 0 * * *"
+    timezone: "UTC"
+    target:
+      type: "http"
+      uri: "https://scheduler-service-HASH.run.app/api/v1/tasks/subscription-runner"
+      httpMethod: "POST"
+      headers:
+        Content-Type: "application/json"
+        Authorization: "Bearer ${API_KEY}"
+      body:
+        parameters:
+          batchSize: 10
+          limit: 100
+
+  - name: email-digest-europe
+    description: "Process email digests for Europe (6 AM Europe/Madrid)"
+    schedule: "0 6 * * *"
+    timezone: "Europe/Madrid"
+    target:
+      type: "http"
+      uri: "https://scheduler-service-HASH.run.app/api/v1/tasks/email-digest-processor"
+      httpMethod: "POST"
+      headers:
+        Content-Type: "application/json"
+        Authorization: "Bearer ${API_KEY}"
+      body:
+        parameters:
+          timezone: "Europe/Madrid"
+          batchSize: 50
+
+  - name: cleanup-tasks-weekly
+    description: "Run cleanup tasks (Sunday at 2 AM)"
+    schedule: "0 2 * * 0"
+    timezone: "UTC"
+    target:
+      type: "http"
+      uri: "https://scheduler-service-HASH.run.app/api/v1/tasks/cleanup-tasks"
+      httpMethod: "POST"
+      headers:
+        Content-Type: "application/json"
+        Authorization: "Bearer ${API_KEY}"
+      body:
+        parameters:
+          olderThan: "30d"
+          types: ["notifications", "logs"]

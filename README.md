@@ -1,203 +1,149 @@
 # NIFYA Scheduler Service
 
-A centralized scheduling service for the NIFYA platform, responsible for executing time-based operations across the system.
+A centralized microservice for managing scheduled tasks across the NIFYA platform.
 
 ## Overview
 
-The Scheduler Service provides a unified approach to managing scheduled tasks in the NIFYA platform:
+The NIFYA Scheduler Service is responsible for executing all time-based operations across the platform, including:
 
-- Executes tasks based on defined cron schedules
-- Manages subscription processing, email digests, and cleanup operations
-- Provides API endpoints for manual task triggering and monitoring
-- Tracks execution history and performance metrics
-- Implements robust error handling and retry mechanisms
+- Processing active subscriptions
+- Generating email digests
+- Performing cleanup and maintenance tasks
+- Managing user-created templates
 
 ## Architecture
 
-The service follows a modular design with these key components:
+The service uses a task-based architecture where each scheduled operation is defined as a "task" with specific parameters, execution logic, and error handling.
 
-- **Task Definitions**: Declarative task configurations with handlers
-- **Task Executor**: Core engine for validating and running tasks
-- **API Layer**: RESTful endpoints for task management
-- **Scheduler**: Cron-based scheduling of recurring tasks
+```
+┌───────────────────┐      ┌─────────────────┐      ┌───────────────────┐
+│                   │      │                 │      │                   │
+│  Cloud Scheduler  │─────▶│    Scheduler    │─────▶│  Backend/Services │
+│                   │      │     Service     │      │                   │
+└───────────────────┘      └─────────────────┘      └───────────────────┘
+                                    │
+                                    │
+                                    ▼
+                           ┌─────────────────┐
+                           │                 │
+                           │    Monitoring   │
+                           │    & Logging    │
+                           │                 │
+                           └─────────────────┘
+```
 
-## Getting Started
+## Key Components
+
+1. **Task Definitions**: Code modules that define schedulable operations
+2. **Task Executor**: Core component for running tasks with validation and error handling
+3. **API Layer**: RESTful endpoints for managing tasks and templates
+4. **Template Manager**: System for managing reusable task templates
+
+## Development
 
 ### Prerequisites
 
-- Node.js 16+
+- Node.js 18+
 - npm or yarn
-- PostgreSQL database (optional)
+- Access to Google Cloud services (for deployment)
+- Access to the NIFYA PostgreSQL database
 
-### Installation
+### Setup
 
-1. Clone the repository:
-   ```
-   git clone https://github.com/yourusername/nifya-scheduler-service.git
-   cd nifya-scheduler-service
-   ```
+```bash
+# Clone the repository
+git clone https://github.com/nifyacorp/scheduler-service.git
+cd scheduler-service
 
-2. Install dependencies:
-   ```
-   npm install
-   ```
+# Install dependencies
+npm install
 
-3. Configure environment variables:
-   ```
-   cp .env.example .env
-   ```
-   Edit the `.env` file with your environment-specific configuration.
+# Set up environment variables
+cp .env.example .env
+# Edit .env with your configuration
 
-4. Start the service:
-   ```
-   npm run dev
-   ```
+# Start development server
+npm run dev
+```
 
-The service will be available at http://localhost:8081.
+### Database Requirements
+
+This service requires database tables that are managed by the backend service. It does not create its own tables. The required tables are:
+
+- `task_history` - For storing execution records
+- `templates` - For managing subscription templates
+
+These tables are defined in the backend's migration file: `backend/supabase/migrations/20250328000000_scheduler_service_tables.sql`
+
+Make sure these tables exist before running this service.
+
+### Configuration
+
+The service is configured via environment variables:
+
+- `PORT`: Server port (default: 8080)
+- `NODE_ENV`: Environment (development, production)
+- `LOG_LEVEL`: Logging verbosity
+- `BACKEND_SERVICE_URL`: URL of the backend service
+- `BACKEND_API_KEY`: API key for backend service authentication
+- `PUBSUB_TOPIC_NOTIFICATIONS`: Topic for notification events
+- `DB_HOST`: PostgreSQL host 
+- `DB_PORT`: PostgreSQL port (default: 5432)
+- `DB_NAME`: Database name
+- `DB_USER`: Database user
+- `DB_PASSWORD`: Database password
+
+### Project Structure
+
+```
+scheduler-service/
+├── src/
+│   ├── index.js           # Entry point
+│   ├── config.js          # Configuration
+│   ├── server.js          # HTTP server setup
+│   ├── scheduler.js       # Core scheduling logic
+│   ├── utils/             # Utilities
+│   ├── models/            # Data models
+│   ├── routes/            # API routes
+│   └── tasks/             # Task implementations
+├── test/                  # Test suite
+├── .github/               # GitHub Actions workflows
+├── Dockerfile             # Container definition
+├── cloudbuild.yaml        # Cloud Build configuration
+└── package.json           # Dependencies and scripts
+```
 
 ## API Endpoints
 
 ### Task Management
 
-- `POST /api/v1/tasks/:taskType`: Execute a task immediately
-- `GET /api/v1/tasks`: List all available tasks
+- `POST /api/v1/tasks/:taskType`: Execute a task
 - `GET /api/v1/tasks/:taskType/status`: Get task status
-- `POST /api/v1/tasks/:taskType/schedule`: Schedule a task with a cron expression
-
-### History
-
-- `GET /api/v1/history`: Get task execution history
-- `GET /api/v1/history/:executionId`: Get specific execution details
+- `GET /api/v1/history`: View task execution history
 
 ### Template Management
 
-- `GET /api/v1/templates`: List all templates with filtering options
-- `GET /api/v1/templates/:id`: Get a specific template by ID
-- `POST /api/v1/templates`: Create a new template
-- `PUT /api/v1/templates/:id`: Update an existing template
+- `GET /api/v1/templates`: List templates
+- `POST /api/v1/templates`: Create a template
+- `GET /api/v1/templates/:id`: Get template details
+- `PUT /api/v1/templates/:id`: Update a template
 - `DELETE /api/v1/templates/:id`: Delete a template
 
-### Admin
+### Service Information
 
-- `GET /api/v1/admin/diagnostics`: Get service diagnostics
-
-### Health Checks
-
-- `GET /health`: Basic health check
-- `GET /ready`: Readiness check
-
-## Task Types
-
-### 1. run-subscriptions
-
-Processes all active user subscriptions to find new matches.
-
-Parameters:
-- `batchSize`: Number of subscriptions to process (default: 10)
-- `subscriptionType`: Optional filter by subscription type
-- `specificIds`: Optional array of specific subscription IDs to process
-
-### 2. email-digest
-
-Generates and sends daily email digest notifications.
-
-Parameters:
-- `timezone`: Timezone to process (default: UTC)
-- `batchSize`: Number of users to process per batch (default: 50)
-
-### 3. cleanup
-
-Performs maintenance cleanup of old data.
-
-Parameters:
-- `notificationRetentionDays`: Days to keep notifications (default: 90)
-- `logRetentionDays`: Days to keep logs (default: 30)
-- `tempFileRetentionDays`: Days to keep temporary files (default: 7)
-
-## Template Management
-
-The service includes a complete template management system that allows users to create, share, and use subscription templates:
-
-### Template Structure
-
-Each template includes:
-
-- **Basic Information**: Name, description, and type (BOE, real estate, etc.)
-- **Prompts**: List of search prompts used for subscription processing
-- **Configuration**: Frequency, icons, and metadata
-- **Access Control**: Public/private status and creator information
-
-### Built-in Templates
-
-The system comes with several built-in templates:
-
-1. **BOE General**: General subscription for the Spanish Official State Gazette
-2. **BOE Subvenciones**: Track grants and subsidies in the BOE
-3. **Real Estate Rental**: Track rental properties in specific areas
-
-### User-Created Templates
-
-Users can:
-
-- Create custom templates for their specific needs
-- Share templates publicly with other users
-- Keep templates private for personal use
-- See usage statistics for their shared templates
-
-### Template-Based Subscriptions
-
-When creating a subscription, users can:
-- Choose from public templates 
-- Create a subscription based on a template
-- Customize template parameters for their needs
-
-## Configuration
-
-The service can be configured through environment variables:
-
-- `PORT`: HTTP port (default: 8081)
-- `NODE_ENV`: Environment mode (development, production)
-- `LOG_LEVEL`: Logging level (default: info)
-- `API_KEY`: API key for service-to-service authentication
-- `DB_HOST`, `DB_PORT`, etc.: Database connection settings
-- Service URLs for connecting to other NIFYA components
-
-## Development
-
-### Running Tests
-
-```
-npm test
-```
-
-### Linting
-
-```
-npm run lint
-```
-
-### Building for Production
-
-```
-npm run build
-```
+- `GET /health`: Service health check
+- `GET /version`: Service version info
 
 ## Deployment
 
-The service is designed to run in containerized environments:
+The service is designed to run on Google Cloud Run:
 
-```
-docker build -t nifya-scheduler-service .
-docker run -p 8081:8081 nifya-scheduler-service
-```
+1. First ensure database tables are created by running the backend migration
+2. Run `setup-gcp.sh` to create the necessary GCP resources
+3. Set up GitHub to Cloud Run connection for the repository
 
-### Cloud Run Deployment
+## Security
 
-```
-gcloud builds submit --tag gcr.io/nifya/scheduler-service
-gcloud run deploy scheduler-service --image gcr.io/nifya/scheduler-service --platform managed
-```
-
-## Monitoring
-
-The service exports structured logs in JSON format compatible with Cloud Logging or other log aggregation systems. Task execution metrics can be accessed through the diagnostics endpoint.
+- Service-to-service authentication using API keys
+- Role-based access for admin operations
+- Secure environment variable handling

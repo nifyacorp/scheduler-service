@@ -1,22 +1,22 @@
-FROM node:20-slim
+FROM node:18-slim
 
 WORKDIR /app
 
-# Copy package.json and package-lock.json
-COPY package*.json ./
+# Set build arguments
+ARG BUILD_TIMESTAMP
+ARG COMMIT_SHA
+ARG DEPLOYMENT_ID
 
-# Install dependencies
+# Set as environment variables
+ENV BUILD_TIMESTAMP=${BUILD_TIMESTAMP}
+ENV COMMIT_SHA=${COMMIT_SHA}
+ENV DEPLOYMENT_ID=${DEPLOYMENT_ID}
+
+COPY package*.json ./
 RUN npm ci --only=production
 
-# Copy application code
 COPY . .
 
-# Expose the port the app runs on
-EXPOSE 8081
+EXPOSE 8080
 
-# Set environment variables
-ENV NODE_ENV=production
-ENV PORT=8081
-
-# Run the application
 CMD ["node", "src/index.js"]
